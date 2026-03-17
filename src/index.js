@@ -23,6 +23,9 @@ options.addArguments("--no-sandbox");
 options.addArguments("--enable-unsafe-swiftshader");
 options.addArguments("--use-gl=swiftshader");
 options.addArguments("--disable-gpu");
+options.addArguments("--disable-webgpu");
+options.addArguments("--disable-features=WebGPU,Vulkan,D3D11");
+options.addArguments("--use-angle=swiftshader");
 options.addArguments("--window-size=900,900"); // ウィンドウサイズを指定する
 options.addArguments("--disable-dev-shm-usage");
 options.addArguments("----lang=ja");
@@ -32,6 +35,11 @@ options.addArguments("--ignore-certificate-errors");
 options.addArguments("--disable-background-networking");
 options.addArguments("--disable-blink-features=AutomationControlled");
 options.addArguments("--allow-insecure-localhost");
+options.addArguments("--disable-extensions");
+options.addArguments("--disable-popup-blocking");
+options.addArguments("--js-flags=--max-old-space-size=512");
+options.addArguments("--memory-pressure-off");
+options.addArguments("--process-per-site");
 // ログ出力先は、サーバー内の絶対パスを動的に取得して出力先を設定したい
 const APP_ROOT = path_1.default.join(__dirname, "../");
 const logger = require("../lib/log/logger").application;
@@ -90,10 +98,8 @@ const seleniumTetsuwanGenshiFc2 = () => __awaiter(void 0, void 0, void 0, functi
         process.exit(1);
     }
     // Selenium WebDriver
-    const driver = new selenium_webdriver_1.Builder()
-        .forBrowser("chrome")
-        .setChromeOptions(options)
-        .build();
+    const buildDriver = () => new selenium_webdriver_1.Builder().forBrowser("chrome").setChromeOptions(options).build();
+    let driver = yield buildDriver();
     try {
         yield driver.manage().setTimeouts({
             pageLoad: 30000,
@@ -206,7 +212,25 @@ const seleniumTetsuwanGenshiFc2 = () => __awaiter(void 0, void 0, void 0, functi
                 no_of_transferfail++;
                 no_of_skip++;
                 yield logger.info("selenium_TetsuwanGenshi_FC2", `access:${no_of_access} nice:${no_of_nice} skip:${no_of_skip} non_title:${no_of_nontitle} no_nice_button:${no_of_nonicebutton} already_nice:${no_of_alreadynice} nice_fail:${no_of_nicefail} transfer_fail:${no_of_transferfail} click_fail:${no_of_clickfail}`);
-                yield driver.navigate().back();
+                // ドライバークラッシュ（ECONNREFUSED）検出時は再起動
+                if (e.message && e.message.includes("ECONNREFUSED")) {
+                    console.log("ドライバーがクラッシュしました。再起動します...");
+                    yield logger.warn("selenium_TetsuwanGenshi_FC2", "ドライバークラッシュを検出。再起動します。");
+                    try {
+                        yield driver.quit();
+                    }
+                    catch (_) { }
+                    driver = yield buildDriver();
+                    yield driver.manage().setTimeouts({
+                        pageLoad: 50000,
+                        implicit: 10000,
+                    });
+                    continue;
+                }
+                try {
+                    yield driver.navigate().back();
+                }
+                catch (_) { }
                 continue;
             }
             // // ポスト日を取得しDBにセーブ

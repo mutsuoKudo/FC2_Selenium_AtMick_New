@@ -11,7 +11,8 @@ options.addArguments("--enable-unsafe-swiftshader");
 options.addArguments("--use-gl=swiftshader");
 options.addArguments("--disable-gpu");
 options.addArguments("--disable-webgpu");
-options.addArguments("--disable-features=WebGPU,Vulkan");
+options.addArguments("--disable-features=WebGPU,Vulkan,D3D11");
+options.addArguments("--use-angle=swiftshader");
 options.addArguments("--window-size=900,900"); // ウィンドウサイズを指定する
 options.addArguments("--disable-dev-shm-usage");
 options.addArguments("----lang=ja");
@@ -21,6 +22,12 @@ options.addArguments("--ignore-certificate-errors");
 options.addArguments("--disable-background-networking");
 options.addArguments("--disable-blink-features=AutomationControlled");
 options.addArguments("--allow-insecure-localhost");
+options.setPageLoadStrategy("eager");
+options.addArguments("--disable-extensions");
+options.addArguments("--disable-popup-blocking");
+options.addArguments("--js-flags=--max-old-space-size=512");
+options.addArguments("--memory-pressure-off");
+options.addArguments("--process-per-site");
 
 // ログ出力先は、サーバー内の絶対パスを動的に取得して出力先を設定したい
 const APP_ROOT = path.join(__dirname, "../");
@@ -89,10 +96,9 @@ const seleniumTetsuwanGenshiFc2 = async () => {
   }
 
   // Selenium WebDriver
-  const driver = new Builder()
-    .forBrowser("chrome")
-    .setChromeOptions(options)
-    .build();
+  const buildDriver = () =>
+    new Builder().forBrowser("chrome").setChromeOptions(options).build();
+  let driver = await buildDriver();
   try {
     await driver.manage().setTimeouts({
       pageLoad: 30000,
@@ -213,12 +219,12 @@ const seleniumTetsuwanGenshiFc2 = async () => {
         await driver.wait(
           async function () {
             const readyState = await driver.executeScript(
-              "return document.readyState"
+              "return document.readyState",
             );
             return readyState === "complete";
           },
           50000,
-          "ページの読み込みがタイムアウトしました"
+          "ページの読み込みがタイムアウトしました",
         );
 
         console.log(blog_title + " に移動 ");
@@ -234,15 +240,36 @@ const seleniumTetsuwanGenshiFc2 = async () => {
             " " +
             blog_url +
             " " +
-            e.message
+            e.message,
         );
         no_of_transferfail++;
         no_of_skip++;
         await logger.info(
           "selenium_TetsuwanGenshi_FC2",
-          `access:${no_of_access} nice:${no_of_nice} skip:${no_of_skip} non_title:${no_of_nontitle} no_nice_button:${no_of_nonicebutton} already_nice:${no_of_alreadynice} nice_fail:${no_of_nicefail} transfer_fail:${no_of_transferfail} click_fail:${no_of_clickfail}`
+          `access:${no_of_access} nice:${no_of_nice} skip:${no_of_skip} non_title:${no_of_nontitle} no_nice_button:${no_of_nonicebutton} already_nice:${no_of_alreadynice} nice_fail:${no_of_nicefail} transfer_fail:${no_of_transferfail} click_fail:${no_of_clickfail}`,
         );
-        await driver.navigate().back();
+
+        // ドライバークラッシュ（ECONNREFUSED）検出時は再起動
+        if (e.message && e.message.includes("ECONNREFUSED")) {
+          console.log("ドライバーがクラッシュしました。再起動します...");
+          await logger.warn(
+            "selenium_TetsuwanGenshi_FC2",
+            "ドライバークラッシュを検出。再起動します。",
+          );
+          try {
+            await driver.quit();
+          } catch (_) {}
+          driver = await buildDriver();
+          await driver.manage().setTimeouts({
+            pageLoad: 50000,
+            implicit: 10000,
+          });
+          continue;
+        }
+
+        try {
+          await driver.navigate().back();
+        } catch (_) {}
         continue;
       }
 
