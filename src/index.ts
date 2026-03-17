@@ -22,6 +22,7 @@ options.addArguments("--ignore-certificate-errors");
 options.addArguments("--disable-background-networking");
 options.addArguments("--disable-blink-features=AutomationControlled");
 options.addArguments("--allow-insecure-localhost");
+options.setPageLoadStrategy("eager");
 options.addArguments("--disable-extensions");
 options.addArguments("--disable-popup-blocking");
 options.addArguments("--js-flags=--max-old-space-size=512");
