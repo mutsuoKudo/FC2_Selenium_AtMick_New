@@ -38,10 +38,123 @@ const readySqlsUrl = [
   "SELECT * FROM selenium_url_fc2 where id >= 0 and active_flg = 0 order by id DESC",
 ];
 const redySqlUpdatePostDate = "update selenium_url_fc2 set ";
+const readySqlUpdateLatestPostDate =
+  "update selenium_url_fc2 set post_date = ? where id = ?";
 const redySqlUpdateNotApplicable =
   "update selenium_url_fc2 set active_flg= '2',remarks = '投稿日が見つからない' where id = ";
 
 /* 途中経過表示用変数 */
+type LatestRssEntry = {
+  title: string;
+  link: string;
+  postDate: string;
+  rssUrl: string;
+};
+
+const buildRssUrl = (blogUrl: string) => {
+  const rssUrl = new URL(blogUrl);
+  rssUrl.hash = "";
+  rssUrl.search = "?xml";
+  return rssUrl.toString();
+};
+
+const decodeXml = (text: string) =>
+  text
+    .replace(/<!\[CDATA\[([\s\S]*?)\]\]>/g, "$1")
+    .replace(/&lt;/g, "<")
+    .replace(/&gt;/g, ">")
+    .replace(/&quot;/g, '"')
+    .replace(/&apos;/g, "'")
+    .replace(/&amp;/g, "&")
+    .trim();
+
+const getXmlTagValue = (xml: string, tagName: string) => {
+  const tagPattern = tagName.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  const match = xml.match(
+    new RegExp(`<${tagPattern}[^>]*>([\\s\\S]*?)</${tagPattern}>`, "i"),
+  );
+  return match ? decodeXml(match[1]) : "";
+};
+
+const formatPostDate = (date: Date) => {
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, "0");
+  const day = String(date.getDate()).padStart(2, "0");
+  const hours = String(date.getHours()).padStart(2, "0");
+  const minutes = String(date.getMinutes()).padStart(2, "0");
+  return `${year}/${month}/${day} ${hours}:${minutes}`;
+};
+
+const fetchText = async (url: string) => {
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), 15000);
+  try {
+    const response = await fetch(url, {
+      signal: controller.signal,
+      headers: {
+        "User-Agent":
+          "Mozilla/5.0 (Windows NT 10.0; Win64; x64) FC2-Selenium-RSS/1.0",
+      },
+    });
+    if (!response.ok) {
+      throw new Error(`HTTP ${response.status} ${response.statusText}`);
+    }
+    return await response.text();
+  } finally {
+    clearTimeout(timeout);
+  }
+};
+
+const fetchLatestRssEntry = async (blogUrl: string): Promise<LatestRssEntry> => {
+  const rssUrl = buildRssUrl(blogUrl);
+  const rss = await fetchText(rssUrl);
+  const itemMatch = rss.match(/<item\b[^>]*>([\s\S]*?)<\/item>/i);
+  if (!itemMatch) {
+    throw new Error("RSS item not found");
+  }
+
+  const itemXml = itemMatch[1];
+  const pubDateText =
+    getXmlTagValue(itemXml, "pubDate") ||
+    getXmlTagValue(itemXml, "dc:date") ||
+    getXmlTagValue(itemXml, "date");
+  if (!pubDateText) {
+    throw new Error("RSS post date not found");
+  }
+
+  const pubDate = new Date(pubDateText);
+  if (Number.isNaN(pubDate.getTime())) {
+    throw new Error(`Invalid RSS post date: ${pubDateText}`);
+  }
+
+  return {
+    title: getXmlTagValue(itemXml, "title"),
+    link: getXmlTagValue(itemXml, "link"),
+    postDate: formatPostDate(pubDate),
+    rssUrl,
+  };
+};
+
+const updateLatestPostDate = async (
+  connection: mysql.Connection,
+  blogId: number,
+  blogUrl: string,
+  blogTitle: string,
+) => {
+  const latestEntry = await fetchLatestRssEntry(blogUrl);
+  await connection.execute(readySqlUpdateLatestPostDate, [
+    latestEntry.postDate,
+    blogId,
+  ]);
+  console.log(
+    `${blogTitle} RSS latest post_date updated: ${latestEntry.postDate}`,
+  );
+  await logger.info(
+    "selenium_AtMick_FC2",
+    `${blogId} ${blogUrl} RSS latest post_date updated: ${latestEntry.postDate} ${latestEntry.title} ${latestEntry.link} ${latestEntry.rssUrl}`,
+  );
+};
+
 let no_of_nice = 0;
 let no_of_access = 0;
 let no_of_skip = 0;
@@ -202,6 +315,18 @@ const seleniumTetsuwanGenshiFc2 = async () => {
 
       // URL移動
       try {
+        try {
+          await updateLatestPostDate(connection, blog_id, blog_url, blog_title);
+        } catch (e: any) {
+          console.log(
+            `${blog_title} RSS latest post_date update failed: ${e.message}`,
+          );
+          await logger.warn(
+            "selenium_AtMick_FC2",
+            `${blog_id} ${blog_url} RSS latest post_date update failed: ${e.message}`,
+          );
+        }
+
         await driver.manage().setTimeouts({
           pageLoad: 50000,
           implicit: 10000,
