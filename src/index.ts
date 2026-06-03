@@ -35,7 +35,7 @@ const logger = require("../lib/log/logger").application;
 
 // SQL準備
 const readySqlsUrl = [
-  "SELECT * FROM selenium_url_fc2 where id >= 0 and active_flg = 0 order by id ASC",
+  "SELECT * FROM selenium_url_fc2 where id >= 0 and active_flg = 0 order by id DESC",
 ];
 const redySqlUpdatePostDate = "update selenium_url_fc2 set ";
 const redySqlUpdateNotApplicable =
@@ -71,11 +71,8 @@ let proccessed_Number_of_row = 0;
 const seleniumTetsuwanGenshiFc2 = async () => {
   console.log("APP_ROOT:", APP_ROOT);
   console.log("Log directory:", path.join(APP_ROOT, "./log/application/"));
-  await logger.info(
-    "selenium_TetsuwanGenshi_FC2",
-    "Selenium TetsuwanGenshi Start"
-  );
-  console.log("selenium TetsuwanGenshi FC2 Start");
+  await logger.info("selenium_AtMick_FC2", "Selenium AtMick Start");
+  console.log("selenium AtMick FC2 Start");
 
   // MySQLデータベース接続
   const connection = await mysql.createConnection({
@@ -90,7 +87,7 @@ const seleniumTetsuwanGenshiFc2 = async () => {
   if (urlResults.length > 0) {
     console.log("first access url:", urlResults[0].url);
   } else {
-    await logger.info("selenium_TetsuwanGenshi_FC2", "URL取得に失敗しました");
+    await logger.info("selenium_AtMick_FC2", "URL取得に失敗しました");
     console.log("URL取得に失敗しました");
     process.exit(1);
   }
@@ -111,7 +108,7 @@ const seleniumTetsuwanGenshiFc2 = async () => {
       await driver.wait(until.elementLocated(By.name("id")), 8000);
       await driver
         .findElement(By.name("id"))
-        .sendKeys("mukudo@fa2.so-net.ne.jp");
+        .sendKeys("mukudo@aqu.bekkoame.ne.jp");
       await driver.wait(until.elementLocated(By.name("pass")), 1000);
       await driver.findElement(By.name("pass")).sendKeys("ncr162100");
       await driver.wait(until.elementLocated(By.name("image")), 1000);
@@ -130,7 +127,7 @@ const seleniumTetsuwanGenshiFc2 = async () => {
       const selector = "#sh_header > a";
       const element = await driver.wait(
         until.elementLocated(By.css(selector)),
-        5000
+        5000,
       );
       await driver.wait(until.elementIsVisible(element), 10000);
 
@@ -140,17 +137,14 @@ const seleniumTetsuwanGenshiFc2 = async () => {
       // 3秒待機
       await driver.sleep(3000);
 
-      console.log(" 鉄腕原子としてログイン ");
-      await logger.info(
-        "selenium_TetsuwanGenshi_FC2",
-        " 鉄腕原子としてログイン "
-      );
+      console.log(" ＠ミックとしてログイン ");
+      await logger.info("selenium_AtMick_FC2", " ＠ミックとしてログイン ");
       await driver.sleep(1000);
     } catch (e: any) {
       console.log(" FC2ブログのログインに失敗しました ");
       await logger.warn(
-        "selenium_TetsuwanGenshi_FC2",
-        " FC2ブログのログインに失敗しました " + e.message
+        "selenium_AtMick_FC2",
+        " FC2ブログのログインに失敗しました " + e.message,
       );
     } finally {
       // 必要であれば処理を描く
@@ -176,7 +170,7 @@ const seleniumTetsuwanGenshiFc2 = async () => {
           " transfer_fail:" +
           no_of_transferfail +
           " click_fail:" +
-          no_of_clickfail
+          no_of_clickfail,
       );
 
       blog_active_flg = url.active_flg;
@@ -188,20 +182,20 @@ const seleniumTetsuwanGenshiFc2 = async () => {
       if (blog_active_flg != 0) {
         console.log(blog_url + ", " + blog_title + "は有効でないためとばす");
         await logger.warn(
-          "selenium_TetsuwanGenshi_FC2",
+          "selenium_AtMick_FC2",
           blog_id +
             " " +
             blog_url +
             ", " +
             blog_title +
-            "は有効でないためとばす"
+            "は有効でないためとばす",
         );
         continue;
       } else {
         console.log(blog_url + ", " + blog_title + "にアクセス");
         await logger.info(
-          "selenium_TetsuwanGenshi_FC2",
-          blog_id + " " + blog_url + ", " + blog_title + "にアクセス"
+          "selenium_AtMick_FC2",
+          blog_id + " " + blog_url + ", " + blog_title + "にアクセス",
         );
         no_of_access++;
       }
@@ -228,11 +222,11 @@ const seleniumTetsuwanGenshiFc2 = async () => {
         );
 
         console.log(blog_title + " に移動 ");
-        await logger.info("selenium_TetsuwanGenshi_FC2", blog_url + " に移動 ");
+        await logger.info("selenium_AtMick_FC2", blog_url + " に移動 ");
       } catch (e: any) {
         console.log(blog_title + " URLの移動に失敗しました ");
         await logger.warn(
-          "selenium_TetsuwanGenshi_FC2",
+          "selenium_AtMick_FC2",
           "URLの移動に失敗しました " +
             blog_id +
             " " +
@@ -245,7 +239,7 @@ const seleniumTetsuwanGenshiFc2 = async () => {
         no_of_transferfail++;
         no_of_skip++;
         await logger.info(
-          "selenium_TetsuwanGenshi_FC2",
+          "selenium_AtMick_FC2",
           `access:${no_of_access} nice:${no_of_nice} skip:${no_of_skip} non_title:${no_of_nontitle} no_nice_button:${no_of_nonicebutton} already_nice:${no_of_alreadynice} nice_fail:${no_of_nicefail} transfer_fail:${no_of_transferfail} click_fail:${no_of_clickfail}`,
         );
 
@@ -253,7 +247,7 @@ const seleniumTetsuwanGenshiFc2 = async () => {
         if (e.message && e.message.includes("ECONNREFUSED")) {
           console.log("ドライバーがクラッシュしました。再起動します...");
           await logger.warn(
-            "selenium_TetsuwanGenshi_FC2",
+            "selenium_AtMick_FC2",
             "ドライバークラッシュを検出。再起動します。",
           );
           try {
@@ -308,11 +302,11 @@ const seleniumTetsuwanGenshiFc2 = async () => {
         " transfer_fail:" +
         no_of_transferfail +
         " click_fail:" +
-        no_of_clickfail
+        no_of_clickfail,
     );
     await logger.info(
-      "selenium_TetsuwanGenshi_FC2",
-      "鉄腕原子として巡回" +
+      "selenium_AtMick_FC2",
+      "＠ミックとして巡回" +
         " " +
         blog_title +
         " access:" +
@@ -332,7 +326,7 @@ const seleniumTetsuwanGenshiFc2 = async () => {
         " transfer_fail:" +
         no_of_transferfail +
         " click_fail:" +
-        no_of_clickfail
+        no_of_clickfail,
     );
     await driver.quit();
     await connection.end();

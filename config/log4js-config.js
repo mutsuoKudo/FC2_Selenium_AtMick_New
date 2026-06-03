@@ -15,7 +15,8 @@ module.exports = {
             filename: path.join(APP_ROOT, "./log/system/system.log"),
             maxLogSize: 5000000, // 5MB
             backups: 5, // 世代管理は5ファイルまで、古いやつgzで圧縮されていく
-            compress: true
+            compress: true,
+            encoding: "utf-8" // エンコーディングを明示的に指定
         },
         applicationLog: {
             type: "multiFile",
@@ -25,6 +26,7 @@ module.exports = {
             maxLogSize: 5000000, // 5MB
             backups: 5, // 世代管理は5ファイルまで、古いやつからgzで圧縮されていく
             compress: true,
+            encoding: "utf-8" // エンコーディングを明示的に指定
         },
         accessLog: {
             type: "dateFile",
@@ -33,6 +35,7 @@ module.exports = {
             daysToKeep: 5, // 5日分の世代管理設定
             compress: true,
             keepFileExt: true,
+            encoding: "utf-8" // エンコーディングを明示的に指定
         }
     },
     categories: {
