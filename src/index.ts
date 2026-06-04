@@ -54,6 +54,9 @@ type LatestRssEntry = {
 const buildRssUrl = (blogUrl: string) => {
   const rssUrl = new URL(blogUrl);
   rssUrl.hash = "";
+  if (/\/blog-entry-\d+\.html$/i.test(rssUrl.pathname)) {
+    rssUrl.pathname = "/";
+  }
   rssUrl.search = "?xml";
   return rssUrl.toString();
 };
