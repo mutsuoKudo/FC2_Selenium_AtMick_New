@@ -3,5 +3,12 @@
   "editor.defaultFormatter": "esbenp.prettier-vscode",
   "editor.formatOnSaveMode": "modificationsIfAvailable",
   "editor.formatOnSave": true,
-  "editor.formatOnPaste": true
+  "editor.formatOnPaste": true,
+  "workbench.colorCustomizations": {
+    "foreground": "#f5f5f5",
+    "descriptionForeground": "#e5e5e5",
+    "editor.foreground": "#f5f5f5",
+    "sideBar.foreground": "#f5f5f5",
+    "panel.foreground": "#f5f5f5"
+  }
 }

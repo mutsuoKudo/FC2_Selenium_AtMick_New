@@ -41,7 +41,7 @@ const redySqlUpdatePostDate = "update selenium_url_fc2 set ";
 const readySqlUpdateLatestPostDate =
   "update selenium_url_fc2 set post_date = ? where id = ?";
 const readySqlMarkInactive =
-  "update selenium_url_fc2 set active_flg = 2, remarks = concat(coalesce(remarks, ''), case when remarks is null or remarks = '' then '' else '\n' end, ?) where id = ?";
+  "update selenium_url_fc2 set active_flg = 3, remarks = concat(coalesce(remarks, ''), case when remarks is null or remarks = '' then '' else '\n' end, ?) where id = ?";
 const redySqlUpdateNotApplicable =
   "update selenium_url_fc2 set active_flg= '2',remarks = '投稿日が見つからない' where id = ";
 
