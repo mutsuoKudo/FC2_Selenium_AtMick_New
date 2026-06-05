@@ -1,5 +1,5 @@
 import mysql from "mysql2/promise";
-import { Builder, By, until } from "selenium-webdriver";
+import { Builder, By, until, WebDriver } from "selenium-webdriver";
 import path from "path";
 const chrome = require("selenium-webdriver/chrome");
 
@@ -42,6 +42,8 @@ const readySqlUpdateLatestPostDate =
   "update selenium_url_fc2 set post_date = ? where id = ?";
 const readySqlMarkInactive =
   "update selenium_url_fc2 set active_flg = 3, remarks = concat(coalesce(remarks, ''), case when remarks is null or remarks = '' then '' else '\n' end, ?) where id = ?";
+const readySqlMarkRestricted =
+  "update selenium_url_fc2 set active_flg = 4, remarks = concat(coalesce(remarks, ''), case when remarks is null or remarks = '' then '' else '\n' end, ?) where id = ?";
 const redySqlUpdateNotApplicable =
   "update selenium_url_fc2 set active_flg= '2',remarks = '投稿日が見つからない' where id = ";
 
@@ -57,9 +59,16 @@ type BlogAvailability =
   | {
       inactive: true;
       reason: string;
+      restricted?: false;
+    }
+  | {
+      restricted: true;
+      reason: string;
+      inactive?: false;
     }
   | {
       inactive: false;
+      restricted?: false;
       reason?: string;
     };
 
@@ -71,6 +80,18 @@ const fc2ClosedPagePatterns = [
   /指定されたページは見つかりません/,
   /お探しのページが見つかりません/,
   /このページは表示できません/,
+];
+
+const restrictedPagePatterns = [
+  /password authentication/i,
+  /this blog is password protected/i,
+  /this page is password protected/i,
+  /パスワード認証/,
+  /パスワードを入力/,
+  /閲覧制限/,
+  /認証が必要/,
+  /このブログはパスワードで保護されています/,
+  /このページはパスワードで保護されています/,
 ];
 
 const buildRssUrl = (blogUrl: string) => {
@@ -130,6 +151,15 @@ const fetchText = async (url: string) => {
   }
 };
 
+const detectRestrictedPage = (text: string) => {
+  const matchedPattern = restrictedPagePatterns.find((pattern) =>
+    pattern.test(text),
+  );
+  return matchedPattern
+    ? `password/restricted page detected: ${matchedPattern.toString()}`
+    : "";
+};
+
 const inspectBlogAvailability = async (
   blogUrl: string,
 ): Promise<BlogAvailability> => {
@@ -179,6 +209,14 @@ const inspectBlogAvailability = async (
       };
     }
 
+    const restrictedReason = detectRestrictedPage(html);
+    if (restrictedReason) {
+      return {
+        restricted: true,
+        reason: restrictedReason,
+      };
+    }
+
     return { inactive: false };
   } catch (e: any) {
     return {
@@ -205,6 +243,74 @@ const markBlogInactive = async (
     "selenium_AtMick_FC2",
     `${blogId} ${blogUrl} marked inactive: ${reason}`,
   );
+};
+
+const markBlogRestricted = async (
+  connection: mysql.Connection,
+  blogId: number,
+  blogUrl: string,
+  blogTitle: string,
+  reason: string,
+) => {
+  const detectedAt = formatPostDate(new Date());
+  const remarks = `[${detectedAt}] restricted by crawler: ${reason}`;
+  await connection.execute(readySqlMarkRestricted, [remarks, blogId]);
+  console.log(`${blogTitle} marked restricted: ${reason}`);
+  await logger.warn(
+    "selenium_AtMick_FC2",
+    `${blogId} ${blogUrl} marked restricted: ${reason}`,
+  );
+};
+
+const dismissUnexpectedAlert = async (driver: WebDriver) => {
+  try {
+    await driver.switchTo().alert().dismiss();
+  } catch (_) {}
+};
+
+const closeExtraWindows = async (driver: WebDriver, keepWindowHandle: string) => {
+  const handles = await driver.getAllWindowHandles();
+  if (handles.length <= 1) {
+    return keepWindowHandle;
+  }
+
+  const keepHandle = handles.includes(keepWindowHandle)
+    ? keepWindowHandle
+    : handles[0];
+  for (const handle of handles) {
+    if (handle === keepHandle) {
+      continue;
+    }
+    try {
+      await driver.switchTo().window(handle);
+      await driver.close();
+    } catch (_) {}
+  }
+  await driver.switchTo().window(keepHandle);
+  return keepHandle;
+};
+
+const waitForBlogPageReady = async (driver: WebDriver) => {
+  const body = await driver.wait(until.elementLocated(By.css("body")), 15000);
+  await driver.wait(until.elementIsVisible(body), 10000);
+
+  try {
+    await driver.wait(
+      async () => {
+        const readyState = (await driver.executeScript(
+          "return document.readyState",
+        )) as string;
+        return readyState === "interactive" || readyState === "complete";
+      },
+      5000,
+      "page did not reach interactive state",
+    );
+  } catch (e: any) {
+    await logger.warn(
+      "selenium_AtMick_FC2",
+      `body is visible but readyState check did not finish: ${e.message}`,
+    );
+  }
 };
 
 const fetchLatestRssEntry = async (blogUrl: string): Promise<LatestRssEntry> => {
@@ -267,6 +373,7 @@ let no_of_nicefail = 0;
 let no_of_transferfail = 0;
 let no_of_clickfail = 0;
 let no_of_inactive = 0;
+let no_of_restricted = 0;
 
 // 更新用変数
 let blog_active_flg = 0;
@@ -312,6 +419,7 @@ const seleniumTetsuwanGenshiFc2 = async () => {
   const buildDriver = () =>
     new Builder().forBrowser("chrome").setChromeOptions(options).build();
   let driver = await buildDriver();
+  let mainWindowHandle = await driver.getWindowHandle();
   try {
     await driver.manage().setTimeouts({
       pageLoad: 30000,
@@ -377,6 +485,8 @@ const seleniumTetsuwanGenshiFc2 = async () => {
           no_of_skip +
           " inactive:" +
           no_of_inactive +
+          " restricted:" +
+          no_of_restricted +
           " non_title:" +
           no_of_nontitle +
           " no_nice_button:" +
@@ -431,7 +541,23 @@ const seleniumTetsuwanGenshiFc2 = async () => {
         no_of_skip++;
         await logger.info(
           "selenium_AtMick_FC2",
-          `access:${no_of_access} nice:${no_of_nice} skip:${no_of_skip} inactive:${no_of_inactive} non_title:${no_of_nontitle} no_nice_button:${no_of_nonicebutton} already_nice:${no_of_alreadynice} nice_fail:${no_of_nicefail} transfer_fail:${no_of_transferfail} click_fail:${no_of_clickfail}`,
+          `access:${no_of_access} nice:${no_of_nice} skip:${no_of_skip} inactive:${no_of_inactive} restricted:${no_of_restricted} non_title:${no_of_nontitle} no_nice_button:${no_of_nonicebutton} already_nice:${no_of_alreadynice} nice_fail:${no_of_nicefail} transfer_fail:${no_of_transferfail} click_fail:${no_of_clickfail}`,
+        );
+        continue;
+      }
+      if (availability.restricted) {
+        await markBlogRestricted(
+          connection,
+          blog_id,
+          blog_url,
+          blog_title,
+          availability.reason,
+        );
+        no_of_restricted++;
+        no_of_skip++;
+        await logger.info(
+          "selenium_AtMick_FC2",
+          `access:${no_of_access} nice:${no_of_nice} skip:${no_of_skip} inactive:${no_of_inactive} restricted:${no_of_restricted} non_title:${no_of_nontitle} no_nice_button:${no_of_nonicebutton} already_nice:${no_of_alreadynice} nice_fail:${no_of_nicefail} transfer_fail:${no_of_transferfail} click_fail:${no_of_clickfail}`,
         );
         continue;
       }
@@ -461,19 +587,31 @@ const seleniumTetsuwanGenshiFc2 = async () => {
           implicit: 10000,
         });
 
+        await dismissUnexpectedAlert(driver);
+        mainWindowHandle = await closeExtraWindows(driver, mainWindowHandle);
         await driver.get(blog_url);
+        await dismissUnexpectedAlert(driver);
+        await waitForBlogPageReady(driver);
 
-        // ページが完全に読み込まれるまで待機
-        await driver.wait(
-          async function () {
-            const readyState = await driver.executeScript(
-              "return document.readyState",
-            );
-            return readyState === "complete";
-          },
-          50000,
-          "ページの読み込みがタイムアウトしました",
+        const restrictedReason = detectRestrictedPage(
+          await driver.getPageSource(),
         );
+        if (restrictedReason) {
+          await markBlogRestricted(
+            connection,
+            blog_id,
+            blog_url,
+            blog_title,
+            restrictedReason,
+          );
+          no_of_restricted++;
+          no_of_skip++;
+          await logger.info(
+            "selenium_AtMick_FC2",
+            `access:${no_of_access} nice:${no_of_nice} skip:${no_of_skip} inactive:${no_of_inactive} restricted:${no_of_restricted} non_title:${no_of_nontitle} no_nice_button:${no_of_nonicebutton} already_nice:${no_of_alreadynice} nice_fail:${no_of_nicefail} transfer_fail:${no_of_transferfail} click_fail:${no_of_clickfail}`,
+          );
+          continue;
+        }
 
         console.log(blog_title + " に移動 ");
         await logger.info("selenium_AtMick_FC2", blog_url + " に移動 ");
@@ -494,7 +632,7 @@ const seleniumTetsuwanGenshiFc2 = async () => {
         no_of_skip++;
         await logger.info(
           "selenium_AtMick_FC2",
-          `access:${no_of_access} nice:${no_of_nice} skip:${no_of_skip} inactive:${no_of_inactive} non_title:${no_of_nontitle} no_nice_button:${no_of_nonicebutton} already_nice:${no_of_alreadynice} nice_fail:${no_of_nicefail} transfer_fail:${no_of_transferfail} click_fail:${no_of_clickfail}`,
+          `access:${no_of_access} nice:${no_of_nice} skip:${no_of_skip} inactive:${no_of_inactive} restricted:${no_of_restricted} non_title:${no_of_nontitle} no_nice_button:${no_of_nonicebutton} already_nice:${no_of_alreadynice} nice_fail:${no_of_nicefail} transfer_fail:${no_of_transferfail} click_fail:${no_of_clickfail}`,
         );
 
         // ドライバークラッシュ（ECONNREFUSED）検出時は再起動
@@ -508,6 +646,7 @@ const seleniumTetsuwanGenshiFc2 = async () => {
             await driver.quit();
           } catch (_) {}
           driver = await buildDriver();
+          mainWindowHandle = await driver.getWindowHandle();
           await driver.manage().setTimeouts({
             pageLoad: 50000,
             implicit: 10000,
@@ -547,6 +686,8 @@ const seleniumTetsuwanGenshiFc2 = async () => {
         no_of_skip +
         " inactive:" +
         no_of_inactive +
+        " restricted:" +
+        no_of_restricted +
         " non_title:" +
         no_of_nontitle +
         " no_nice_button:" +
@@ -573,6 +714,8 @@ const seleniumTetsuwanGenshiFc2 = async () => {
         no_of_skip +
         " inactive:" +
         no_of_inactive +
+        " restricted:" +
+        no_of_restricted +
         " non_title:" +
         no_of_nontitle +
         " no_nice_button:" +
