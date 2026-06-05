@@ -9,6 +9,7 @@
   "scripts": {
     "start": "ts-node src/index.ts",
     "dev": "ts-node-dev --respawn --transpile-only src/index.ts",
+    "normalize:post-date": "ts-node src/normalizePostDates.ts",
     "build": "tsc",
     "test": "echo \"Error: no test specified\" && exit 1"
   },
