@@ -15,7 +15,7 @@ options.addArguments("--disable-features=WebGPU,Vulkan,D3D11");
 options.addArguments("--use-angle=swiftshader");
 options.addArguments("--window-size=900,900"); // ウィンドウサイズを指定する
 options.addArguments("--disable-dev-shm-usage");
-options.addArguments("----lang=ja");
+options.addArguments("--lang=ja");
 options.addArguments("--disable-notifications");
 options.addArguments("--ignore-ssl-errors");
 options.addArguments("--ignore-certificate-errors");
@@ -40,6 +40,8 @@ const readySqlsUrl = [
 const redySqlUpdatePostDate = "update selenium_url_fc2 set ";
 const readySqlUpdateLatestPostDate =
   "update selenium_url_fc2 set post_date = ? where id = ?";
+const readySqlMarkInactive =
+  "update selenium_url_fc2 set active_flg = 2, remarks = concat(coalesce(remarks, ''), case when remarks is null or remarks = '' then '' else '\n' end, ?) where id = ?";
 const redySqlUpdateNotApplicable =
   "update selenium_url_fc2 set active_flg= '2',remarks = '投稿日が見つからない' where id = ";
 
@@ -50,6 +52,26 @@ type LatestRssEntry = {
   postDate: string;
   rssUrl: string;
 };
+
+type BlogAvailability =
+  | {
+      inactive: true;
+      reason: string;
+    }
+  | {
+      inactive: false;
+      reason?: string;
+    };
+
+const fc2ClosedPagePatterns = [
+  /404\s*not\s*found/i,
+  /このブログは存在しません/,
+  /ブログが存在しません/,
+  /ブログが見つかりません/,
+  /指定されたページは見つかりません/,
+  /お探しのページが見つかりません/,
+  /このページは表示できません/,
+];
 
 const buildRssUrl = (blogUrl: string) => {
   const rssUrl = new URL(blogUrl);
@@ -106,6 +128,83 @@ const fetchText = async (url: string) => {
   } finally {
     clearTimeout(timeout);
   }
+};
+
+const inspectBlogAvailability = async (
+  blogUrl: string,
+): Promise<BlogAvailability> => {
+  let parsedUrl: URL;
+  try {
+    parsedUrl = new URL(blogUrl);
+  } catch (e: any) {
+    return {
+      inactive: true,
+      reason: `invalid URL: ${e.message}`,
+    };
+  }
+
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), 15000);
+  try {
+    const response = await fetch(parsedUrl.toString(), {
+      signal: controller.signal,
+      headers: {
+        "User-Agent":
+          "Mozilla/5.0 (Windows NT 10.0; Win64; x64) FC2-Selenium-Check/1.0",
+      },
+    });
+
+    if (response.status === 404 || response.status === 410) {
+      return {
+        inactive: true,
+        reason: `blog page returned HTTP ${response.status}`,
+      };
+    }
+
+    if (!response.ok) {
+      return {
+        inactive: false,
+        reason: `blog page returned HTTP ${response.status}`,
+      };
+    }
+
+    const html = await response.text();
+    const closedPattern = fc2ClosedPagePatterns.find((pattern) =>
+      pattern.test(html),
+    );
+    if (closedPattern) {
+      return {
+        inactive: true,
+        reason: `FC2 closed/not-found page detected: ${closedPattern.toString()}`,
+      };
+    }
+
+    return { inactive: false };
+  } catch (e: any) {
+    return {
+      inactive: false,
+      reason: `blog availability check failed: ${e.message}`,
+    };
+  } finally {
+    clearTimeout(timeout);
+  }
+};
+
+const markBlogInactive = async (
+  connection: mysql.Connection,
+  blogId: number,
+  blogUrl: string,
+  blogTitle: string,
+  reason: string,
+) => {
+  const detectedAt = formatPostDate(new Date());
+  const remarks = `[${detectedAt}] inactive by crawler: ${reason}`;
+  await connection.execute(readySqlMarkInactive, [remarks, blogId]);
+  console.log(`${blogTitle} marked inactive: ${reason}`);
+  await logger.warn(
+    "selenium_AtMick_FC2",
+    `${blogId} ${blogUrl} marked inactive: ${reason}`,
+  );
 };
 
 const fetchLatestRssEntry = async (blogUrl: string): Promise<LatestRssEntry> => {
@@ -167,6 +266,7 @@ let no_of_alreadynice = 0;
 let no_of_nicefail = 0;
 let no_of_transferfail = 0;
 let no_of_clickfail = 0;
+let no_of_inactive = 0;
 
 // 更新用変数
 let blog_active_flg = 0;
@@ -275,6 +375,8 @@ const seleniumTetsuwanGenshiFc2 = async () => {
           no_of_nice +
           " skip:" +
           no_of_skip +
+          " inactive:" +
+          no_of_inactive +
           " non_title:" +
           no_of_nontitle +
           " no_nice_button:" +
@@ -314,6 +416,30 @@ const seleniumTetsuwanGenshiFc2 = async () => {
           blog_id + " " + blog_url + ", " + blog_title + "にアクセス",
         );
         no_of_access++;
+      }
+
+      const availability = await inspectBlogAvailability(blog_url);
+      if (availability.inactive) {
+        await markBlogInactive(
+          connection,
+          blog_id,
+          blog_url,
+          blog_title,
+          availability.reason,
+        );
+        no_of_inactive++;
+        no_of_skip++;
+        await logger.info(
+          "selenium_AtMick_FC2",
+          `access:${no_of_access} nice:${no_of_nice} skip:${no_of_skip} inactive:${no_of_inactive} non_title:${no_of_nontitle} no_nice_button:${no_of_nonicebutton} already_nice:${no_of_alreadynice} nice_fail:${no_of_nicefail} transfer_fail:${no_of_transferfail} click_fail:${no_of_clickfail}`,
+        );
+        continue;
+      }
+      if (availability.reason) {
+        await logger.warn(
+          "selenium_AtMick_FC2",
+          `${blog_id} ${blog_url} availability check warning: ${availability.reason}`,
+        );
       }
 
       // URL移動
@@ -368,7 +494,7 @@ const seleniumTetsuwanGenshiFc2 = async () => {
         no_of_skip++;
         await logger.info(
           "selenium_AtMick_FC2",
-          `access:${no_of_access} nice:${no_of_nice} skip:${no_of_skip} non_title:${no_of_nontitle} no_nice_button:${no_of_nonicebutton} already_nice:${no_of_alreadynice} nice_fail:${no_of_nicefail} transfer_fail:${no_of_transferfail} click_fail:${no_of_clickfail}`,
+          `access:${no_of_access} nice:${no_of_nice} skip:${no_of_skip} inactive:${no_of_inactive} non_title:${no_of_nontitle} no_nice_button:${no_of_nonicebutton} already_nice:${no_of_alreadynice} nice_fail:${no_of_nicefail} transfer_fail:${no_of_transferfail} click_fail:${no_of_clickfail}`,
         );
 
         // ドライバークラッシュ（ECONNREFUSED）検出時は再起動
@@ -419,6 +545,8 @@ const seleniumTetsuwanGenshiFc2 = async () => {
         no_of_nice +
         " skip:" +
         no_of_skip +
+        " inactive:" +
+        no_of_inactive +
         " non_title:" +
         no_of_nontitle +
         " no_nice_button:" +
@@ -443,6 +571,8 @@ const seleniumTetsuwanGenshiFc2 = async () => {
         no_of_nice +
         " skip:" +
         no_of_skip +
+        " inactive:" +
+        no_of_inactive +
         " non_title:" +
         no_of_nontitle +
         " no_nice_button:" +
