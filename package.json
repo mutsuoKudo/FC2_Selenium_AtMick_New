@@ -8,7 +8,11 @@
   },
   "scripts": {
     "start": "ts-node src/index.ts",
+    "start:at-mick": "ts-node src/index.ts --profile=at-mick",
+    "start:tetsuwan-genshi": "ts-node src/index.ts --profile=tetsuwan-genshi",
     "start:inactive-interval": "ts-node src/index.ts --active-flg=2",
+    "start:inactive-interval:at-mick": "ts-node src/index.ts --profile=at-mick --active-flg=2",
+    "start:inactive-interval:tetsuwan-genshi": "ts-node src/index.ts --profile=tetsuwan-genshi --active-flg=2",
     "dev": "ts-node-dev --respawn --transpile-only src/index.ts",
     "normalize:post-date": "ts-node src/normalizePostDates.ts",
     "build": "tsc",
