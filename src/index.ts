@@ -423,31 +423,20 @@ const updateLatestPostDate = async (
   );
 };
 
-let no_of_nice = 0;
 let no_of_access = 0;
 let no_of_skip = 0;
-let no_of_nontitle = 0;
-let no_of_nonicebutton = 0;
-let no_of_alreadynice = 0;
-let no_of_nicefail = 0;
 let no_of_transferfail = 0;
-let no_of_clickfail = 0;
 let no_of_inactive = 0;
 let no_of_restricted = 0;
+
+const progressText = () =>
+  `access:${no_of_access} skip:${no_of_skip} inactive:${no_of_inactive} restricted:${no_of_restricted} transfer_fail:${no_of_transferfail}`;
 
 // 更新用変数
 let blog_id = 0;
 let blog_url = "";
 let blog_title = "";
 let blog_post_date = "";
-let article_post_only_date = "";
-let addStarButtonDisplayed = false;
-let postDateDisplayed = false;
-let nice_button = null;
-let element_post_year = null;
-let element_post_month = null;
-let element_post_day = null;
-let proccessed_Number_of_row = 0;
 
 // 非同期関数設定
 const seleniumTetsuwanGenshiFc2 = async () => {
@@ -540,30 +529,7 @@ const seleniumTetsuwanGenshiFc2 = async () => {
 
     // 取得したURLの数だけループ
     for (let url of urlResults) {
-      console.log(
-        " access:" +
-          no_of_access +
-          " nice:" +
-          no_of_nice +
-          " skip:" +
-          no_of_skip +
-          " inactive:" +
-          no_of_inactive +
-          " restricted:" +
-          no_of_restricted +
-          " non_title:" +
-          no_of_nontitle +
-          " no_nice_button:" +
-          no_of_nonicebutton +
-          " already_nice:" +
-          no_of_alreadynice +
-          " nice_fail:" +
-          no_of_nicefail +
-          " transfer_fail:" +
-          no_of_transferfail +
-          " click_fail:" +
-          no_of_clickfail,
-      );
+      console.log(" " + progressText());
 
       blog_id = url.id;
       blog_url = url.url;
@@ -590,7 +556,7 @@ const seleniumTetsuwanGenshiFc2 = async () => {
         no_of_skip++;
         await logger.info(
           "selenium_AtMick_FC2",
-          `access:${no_of_access} nice:${no_of_nice} skip:${no_of_skip} inactive:${no_of_inactive} restricted:${no_of_restricted} non_title:${no_of_nontitle} no_nice_button:${no_of_nonicebutton} already_nice:${no_of_alreadynice} nice_fail:${no_of_nicefail} transfer_fail:${no_of_transferfail} click_fail:${no_of_clickfail}`,
+          progressText(),
         );
         continue;
       }
@@ -606,7 +572,7 @@ const seleniumTetsuwanGenshiFc2 = async () => {
         no_of_skip++;
         await logger.info(
           "selenium_AtMick_FC2",
-          `access:${no_of_access} nice:${no_of_nice} skip:${no_of_skip} inactive:${no_of_inactive} restricted:${no_of_restricted} non_title:${no_of_nontitle} no_nice_button:${no_of_nonicebutton} already_nice:${no_of_alreadynice} nice_fail:${no_of_nicefail} transfer_fail:${no_of_transferfail} click_fail:${no_of_clickfail}`,
+          progressText(),
         );
         continue;
       }
@@ -655,7 +621,7 @@ const seleniumTetsuwanGenshiFc2 = async () => {
           no_of_skip++;
           await logger.info(
             "selenium_AtMick_FC2",
-            `access:${no_of_access} nice:${no_of_nice} skip:${no_of_skip} inactive:${no_of_inactive} restricted:${no_of_restricted} non_title:${no_of_nontitle} no_nice_button:${no_of_nonicebutton} already_nice:${no_of_alreadynice} nice_fail:${no_of_nicefail} transfer_fail:${no_of_transferfail} click_fail:${no_of_clickfail}`,
+            progressText(),
           );
           continue;
         }
@@ -674,7 +640,7 @@ const seleniumTetsuwanGenshiFc2 = async () => {
           no_of_skip++;
           await logger.info(
             "selenium_AtMick_FC2",
-            `access:${no_of_access} nice:${no_of_nice} skip:${no_of_skip} inactive:${no_of_inactive} restricted:${no_of_restricted} non_title:${no_of_nontitle} no_nice_button:${no_of_nonicebutton} already_nice:${no_of_alreadynice} nice_fail:${no_of_nicefail} transfer_fail:${no_of_transferfail} click_fail:${no_of_clickfail}`,
+            progressText(),
           );
           continue;
         }
@@ -695,7 +661,7 @@ const seleniumTetsuwanGenshiFc2 = async () => {
           no_of_skip++;
           await logger.info(
             "selenium_AtMick_FC2",
-            `access:${no_of_access} nice:${no_of_nice} skip:${no_of_skip} inactive:${no_of_inactive} restricted:${no_of_restricted} non_title:${no_of_nontitle} no_nice_button:${no_of_nonicebutton} already_nice:${no_of_alreadynice} nice_fail:${no_of_nicefail} transfer_fail:${no_of_transferfail} click_fail:${no_of_clickfail}`,
+            progressText(),
           );
           continue;
         }
@@ -716,7 +682,7 @@ const seleniumTetsuwanGenshiFc2 = async () => {
         no_of_skip++;
         await logger.info(
           "selenium_AtMick_FC2",
-          `access:${no_of_access} nice:${no_of_nice} skip:${no_of_skip} inactive:${no_of_inactive} restricted:${no_of_restricted} non_title:${no_of_nontitle} no_nice_button:${no_of_nonicebutton} already_nice:${no_of_alreadynice} nice_fail:${no_of_nicefail} transfer_fail:${no_of_transferfail} click_fail:${no_of_clickfail}`,
+          progressText(),
         );
 
         // ドライバークラッシュ（ECONNREFUSED）検出時は再起動
@@ -761,57 +727,10 @@ const seleniumTetsuwanGenshiFc2 = async () => {
     }
   } finally {
     await driver.sleep(5000);
-    console.log(
-      " access:" +
-        no_of_access +
-        " nice:" +
-        no_of_nice +
-        " skip:" +
-        no_of_skip +
-        " inactive:" +
-        no_of_inactive +
-        " restricted:" +
-        no_of_restricted +
-        " non_title:" +
-        no_of_nontitle +
-        " no_nice_button:" +
-        no_of_nonicebutton +
-        " already_nice:" +
-        no_of_alreadynice +
-        " nice_fail:" +
-        no_of_nicefail +
-        " transfer_fail:" +
-        no_of_transferfail +
-        " click_fail:" +
-        no_of_clickfail,
-    );
+    console.log(" " + progressText());
     await logger.info(
       "selenium_AtMick_FC2",
-      "＠ミックとして巡回" +
-        " " +
-        blog_title +
-        " access:" +
-        no_of_access +
-        " nice:" +
-        no_of_nice +
-        " skip:" +
-        no_of_skip +
-        " inactive:" +
-        no_of_inactive +
-        " restricted:" +
-        no_of_restricted +
-        " non_title:" +
-        no_of_nontitle +
-        " no_nice_button:" +
-        no_of_nonicebutton +
-        " already_nice:" +
-        no_of_alreadynice +
-        " nice_fail:" +
-        no_of_nicefail +
-        " transfer_fail:" +
-        no_of_transferfail +
-        " click_fail:" +
-        no_of_clickfail,
+      "＠ミックとして巡回" + " " + blog_title + " " + progressText(),
     );
     await driver.quit();
     await connection.end();
