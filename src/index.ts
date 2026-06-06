@@ -220,6 +220,14 @@ const inspectChromeSslErrorPage = async (driver: WebDriver) => {
   return detectChromeSslError(`${currentUrl}\n${title}\n${pageSource}`);
 };
 
+const shouldRestartDriverAfterNavigationError = (text: string) =>
+  /ECONNREFUSED/i.test(text) ||
+  /Timed out receiving message from renderer/i.test(text) ||
+  /chrome not reachable/i.test(text) ||
+  /invalid session id/i.test(text) ||
+  /session deleted/i.test(text) ||
+  /target window already closed/i.test(text);
+
 const inspectBlogAvailability = async (
   blogUrl: string,
 ): Promise<BlogAvailability> => {
@@ -685,12 +693,12 @@ const seleniumTetsuwanGenshiFc2 = async () => {
           progressText(),
         );
 
-        // ドライバークラッシュ（ECONNREFUSED）検出時は再起動
-        if (e.message && e.message.includes("ECONNREFUSED")) {
-          console.log("ドライバーがクラッシュしました。再起動します...");
+        // レンダラータイムアウトなどでChromeが不安定な場合は再起動
+        if (shouldRestartDriverAfterNavigationError(e.message || "")) {
+          console.log("ドライバーが不安定なため再起動します...");
           await logger.warn(
             "selenium_AtMick_FC2",
-            "ドライバークラッシュを検出。再起動します。",
+            "ドライバー不安定を検出。再起動します。 " + e.message,
           );
           try {
             await driver.quit();
