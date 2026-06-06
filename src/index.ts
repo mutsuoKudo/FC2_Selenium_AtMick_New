@@ -108,8 +108,11 @@ const chromeSslErrorPatterns = [
   /ERR_CERT_COMMON_NAME_INVALID/i,
   /ERR_CERT_DATE_INVALID/i,
   /ERR_CERT_INVALID/i,
+  /ERR_NAME_NOT_RESOLVED/i,
+  /DNS_PROBE_FINISHED_NXDOMAIN/i,
   /doesn't support a secure connection/i,
   /can't provide a secure connection/i,
+  /DNS address could not be found/i,
   /uses an unsupported protocol/i,
   /chrome-error:\/\/chromewebdata/i,
 ];
