@@ -38,9 +38,28 @@ options.addArguments("--process-per-site");
 const APP_ROOT = path.join(__dirname, "../");
 const logger = require("../lib/log/logger").application;
 
+const getActiveFlgFromArgs = () => {
+  const activeFlgArg = process.argv.find((arg) =>
+    arg.startsWith("--active-flg="),
+  );
+  if (!activeFlgArg) {
+    return 0;
+  }
+
+  const activeFlg = Number(activeFlgArg.split("=")[1]);
+  if (!Number.isInteger(activeFlg) || activeFlg < 0 || activeFlg > 4) {
+    throw new Error(
+      `Invalid --active-flg value: ${activeFlgArg}. Use 0, 1, 2, 3, or 4.`,
+    );
+  }
+  return activeFlg;
+};
+
+const targetActiveFlg = getActiveFlgFromArgs();
+
 // SQL準備
 const readySqlsUrl = [
-  "SELECT * FROM selenium_url_fc2 where id >= 0 and active_flg = 0 order by id DESC",
+  "SELECT * FROM selenium_url_fc2 where id >= 0 and active_flg = ? order by id DESC",
 ];
 const redySqlUpdatePostDate = "update selenium_url_fc2 set ";
 const readySqlUpdateLatestPostDate =
@@ -437,6 +456,11 @@ const seleniumTetsuwanGenshiFc2 = async () => {
   console.log("Log directory:", path.join(APP_ROOT, "./log/application/"));
   await logger.info("selenium_AtMick_FC2", "Selenium AtMick Start");
   console.log("selenium AtMick FC2 Start");
+  console.log("target active_flg:", targetActiveFlg);
+  await logger.info(
+    "selenium_AtMick_FC2",
+    `target active_flg: ${targetActiveFlg}`,
+  );
 
   // MySQLデータベース接続
   const connection = await mysql.createConnection({
@@ -446,7 +470,7 @@ const seleniumTetsuwanGenshiFc2 = async () => {
     port: 3306,
     database: "seleniumdb",
   });
-  const [urls] = await connection.execute(readySqlsUrl[0]);
+  const [urls] = await connection.execute(readySqlsUrl[0], [targetActiveFlg]);
   const urlResults = urls as any[];
   if (urlResults.length > 0) {
     console.log("first access url:", urlResults[0].url);

@@ -8,6 +8,7 @@
   },
   "scripts": {
     "start": "ts-node src/index.ts",
+    "start:inactive-interval": "ts-node src/index.ts --active-flg=2",
     "dev": "ts-node-dev --respawn --transpile-only src/index.ts",
     "normalize:post-date": "ts-node src/normalizePostDates.ts",
     "build": "tsc",
