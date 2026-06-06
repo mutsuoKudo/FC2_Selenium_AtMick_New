@@ -436,7 +436,6 @@ let no_of_inactive = 0;
 let no_of_restricted = 0;
 
 // 更新用変数
-let blog_active_flg = 0;
 let blog_id = 0;
 let blog_url = "";
 let blog_title = "";
@@ -566,32 +565,17 @@ const seleniumTetsuwanGenshiFc2 = async () => {
           no_of_clickfail,
       );
 
-      blog_active_flg = url.active_flg;
       blog_id = url.id;
       blog_url = url.url;
       blog_title = url.title;
       blog_post_date = url.post_date;
 
-      if (blog_active_flg != 0) {
-        console.log(blog_url + ", " + blog_title + "は有効でないためとばす");
-        await logger.warn(
-          "selenium_AtMick_FC2",
-          blog_id +
-            " " +
-            blog_url +
-            ", " +
-            blog_title +
-            "は有効でないためとばす",
-        );
-        continue;
-      } else {
-        console.log(blog_url + ", " + blog_title + "にアクセス");
-        await logger.info(
-          "selenium_AtMick_FC2",
-          blog_id + " " + blog_url + ", " + blog_title + "にアクセス",
-        );
-        no_of_access++;
-      }
+      console.log(blog_url + ", " + blog_title + "にアクセス");
+      await logger.info(
+        "selenium_AtMick_FC2",
+        blog_id + " " + blog_url + ", " + blog_title + "にアクセス",
+      );
+      no_of_access++;
 
       const availability = await inspectBlogAvailability(blog_url);
       if (availability.inactive) {
