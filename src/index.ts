@@ -1,10 +1,15 @@
 import mysql from "mysql2/promise";
 import { Builder, By, until, WebDriver } from "selenium-webdriver";
 import path from "path";
+import os from "os";
 const chrome = require("selenium-webdriver/chrome");
 
 // Chromeオプションの設定
 let options = new chrome.Options();
+options.addArguments("--remote-debugging-port=0");
+options.addArguments(
+  `--user-data-dir=${path.join(os.tmpdir(), `fc2-selenium-chrome-${process.pid}-${Date.now()}`)}`,
+);
 // options.addArguments("--headless");
 options.addArguments("--no-sandbox");
 options.addArguments("--enable-unsafe-swiftshader");
@@ -94,6 +99,21 @@ const restrictedPagePatterns = [
   /このページはパスワードで保護されています/,
 ];
 
+const chromeSslErrorPatterns = [
+  /ERR_SSL_VERSION_OR_CIPHER_MISMATCH/i,
+  /ERR_SSL_PROTOCOL_ERROR/i,
+  /ERR_SSL_OBSOLETE_VERSION/i,
+  /ERR_SSL_CLIENT_AUTH_CERT_NEEDED/i,
+  /ERR_CERT_AUTHORITY_INVALID/i,
+  /ERR_CERT_COMMON_NAME_INVALID/i,
+  /ERR_CERT_DATE_INVALID/i,
+  /ERR_CERT_INVALID/i,
+  /doesn't support a secure connection/i,
+  /can't provide a secure connection/i,
+  /uses an unsupported protocol/i,
+  /chrome-error:\/\/chromewebdata/i,
+];
+
 const buildRssUrl = (blogUrl: string) => {
   const rssUrl = new URL(blogUrl);
   rssUrl.hash = "";
@@ -158,6 +178,24 @@ const detectRestrictedPage = (text: string) => {
   return matchedPattern
     ? `password/restricted page detected: ${matchedPattern.toString()}`
     : "";
+};
+
+const detectChromeSslError = (text: string) => {
+  const matchedPattern = chromeSslErrorPatterns.find((pattern) =>
+    pattern.test(text),
+  );
+  return matchedPattern
+    ? `Chrome SSL error page detected: ${matchedPattern.toString()}`
+    : "";
+};
+
+const inspectChromeSslErrorPage = async (driver: WebDriver) => {
+  const [currentUrl, title, pageSource] = await Promise.all([
+    driver.getCurrentUrl().catch(() => ""),
+    driver.getTitle().catch(() => ""),
+    driver.getPageSource().catch(() => ""),
+  ]);
+  return detectChromeSslError(`${currentUrl}\n${title}\n${pageSource}`);
 };
 
 const inspectBlogAvailability = async (
@@ -593,9 +631,26 @@ const seleniumTetsuwanGenshiFc2 = async () => {
         await dismissUnexpectedAlert(driver);
         await waitForBlogPageReady(driver);
 
-        const restrictedReason = detectRestrictedPage(
-          await driver.getPageSource(),
-        );
+        const sslErrorReason = await inspectChromeSslErrorPage(driver);
+        if (sslErrorReason) {
+          await markBlogInactive(
+            connection,
+            blog_id,
+            blog_url,
+            blog_title,
+            sslErrorReason,
+          );
+          no_of_inactive++;
+          no_of_skip++;
+          await logger.info(
+            "selenium_AtMick_FC2",
+            `access:${no_of_access} nice:${no_of_nice} skip:${no_of_skip} inactive:${no_of_inactive} restricted:${no_of_restricted} non_title:${no_of_nontitle} no_nice_button:${no_of_nonicebutton} already_nice:${no_of_alreadynice} nice_fail:${no_of_nicefail} transfer_fail:${no_of_transferfail} click_fail:${no_of_clickfail}`,
+          );
+          continue;
+        }
+
+        const pageSource = await driver.getPageSource();
+        const restrictedReason = detectRestrictedPage(pageSource);
         if (restrictedReason) {
           await markBlogRestricted(
             connection,
@@ -616,6 +671,24 @@ const seleniumTetsuwanGenshiFc2 = async () => {
         console.log(blog_title + " に移動 ");
         await logger.info("selenium_AtMick_FC2", blog_url + " に移動 ");
       } catch (e: any) {
+        const sslErrorReason = detectChromeSslError(e.message || "");
+        if (sslErrorReason) {
+          await markBlogInactive(
+            connection,
+            blog_id,
+            blog_url,
+            blog_title,
+            sslErrorReason,
+          );
+          no_of_inactive++;
+          no_of_skip++;
+          await logger.info(
+            "selenium_AtMick_FC2",
+            `access:${no_of_access} nice:${no_of_nice} skip:${no_of_skip} inactive:${no_of_inactive} restricted:${no_of_restricted} non_title:${no_of_nontitle} no_nice_button:${no_of_nonicebutton} already_nice:${no_of_alreadynice} nice_fail:${no_of_nicefail} transfer_fail:${no_of_transferfail} click_fail:${no_of_clickfail}`,
+          );
+          continue;
+        }
+
         console.log(blog_title + " URLの移動に失敗しました ");
         await logger.warn(
           "selenium_AtMick_FC2",
