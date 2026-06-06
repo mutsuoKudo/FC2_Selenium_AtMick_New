@@ -11,6 +11,10 @@ type CrawlProfile = {
   displayName: string;
   logKey: string;
   order: "ASC" | "DESC";
+  windowPosition: {
+    x: number;
+    y: number;
+  };
 };
 
 const profiles: Record<string, CrawlProfile> = {
@@ -21,6 +25,10 @@ const profiles: Record<string, CrawlProfile> = {
     displayName: "＠ミック",
     logKey: "selenium_AtMick_FC2",
     order: "DESC",
+    windowPosition: {
+      x: 0,
+      y: 0,
+    },
   },
   "tetsuwan-genshi": {
     id: "tetsuwan-genshi",
@@ -28,7 +36,11 @@ const profiles: Record<string, CrawlProfile> = {
     password: "ncr162100",
     displayName: "鉄腕原子",
     logKey: "selenium_TetsuwanGenshi_FC2",
-    order: "DESC",
+    order: "ASC",
+    windowPosition: {
+      x: 920,
+      y: 0,
+    },
   },
 };
 
@@ -63,6 +75,9 @@ options.addArguments("--disable-webgpu");
 options.addArguments("--disable-features=WebGPU,Vulkan,D3D11");
 options.addArguments("--use-angle=swiftshader");
 options.addArguments("--window-size=900,900"); // ウィンドウサイズを指定する
+options.addArguments(
+  `--window-position=${profile.windowPosition.x},${profile.windowPosition.y}`,
+);
 options.addArguments("--disable-dev-shm-usage");
 options.addArguments("--lang=ja");
 options.addArguments("--disable-notifications");
