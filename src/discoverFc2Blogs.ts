@@ -45,6 +45,16 @@ const decodeHtmlEntities = (value: string) =>
     .replace(/\s+/g, " ")
     .trim();
 
+const toUtf8mb3Text = (value: string, maxLength?: number) => {
+  const supportedChars = Array.from(value).filter((char) => {
+    const codePoint = char.codePointAt(0);
+    return codePoint !== undefined && codePoint <= 0xffff;
+  });
+  const trimmedChars =
+    maxLength === undefined ? supportedChars : supportedChars.slice(0, maxLength);
+  return trimmedChars.join("").trim();
+};
+
 const normalizeBlogUrl = (value: string) => {
   const url = new URL(value);
   url.hash = "";
@@ -130,8 +140,11 @@ const discoverFromFc2NewEntries = async (): Promise<DiscoveredBlog[]> => {
       }
 
       const normalizedUrl = normalizeBlogUrl(absoluteUrl.toString());
-      const title = decodeHtmlEntities(
-        match[4].replace(/<span\b[^>]*>[\s\S]*?<\/span>/gi, ""),
+      const title = toUtf8mb3Text(
+        decodeHtmlEntities(
+          match[4].replace(/<span\b[^>]*>[\s\S]*?<\/span>/gi, ""),
+        ),
+        255,
       );
       if (!title || /^\d+\s/.test(title)) {
         continue;
@@ -187,7 +200,7 @@ const fetchRecentRssEntries = async (blogUrl: string): Promise<RssEntry[]> => {
         return null;
       }
       return {
-        title: getXmlTagValue(itemXml, "title"),
+        title: toUtf8mb3Text(getXmlTagValue(itemXml, "title")),
         link: getXmlTagValue(itemXml, "link"),
         postDate,
       };
@@ -287,11 +300,14 @@ const discoverFc2Blogs = async () => {
 
       const decision = decideActiveFlg(entries);
       const postDate = formatPostDate(entries[0].postDate);
-      const remarks = `[${formatPostDate(new Date())}] ${decision.reason}; source=${candidate.sourceUrl}; latest="${entries[0].title}"`;
+      const title = toUtf8mb3Text(candidate.title, 255);
+      const remarks = toUtf8mb3Text(
+        `[${formatPostDate(new Date())}] ${decision.reason}; source=${candidate.sourceUrl}; latest="${entries[0].title}"`,
+      );
       discovered++;
 
       console.log(
-        `${shouldApply ? "insert" : "dry-run"} id=${nextId} active_flg=${decision.activeFlg} post_date=${postDate} interval=${decision.updateIntervalDays?.toFixed(1) ?? "n/a"} ${candidate.url} ${candidate.title}`,
+        `${shouldApply ? "insert" : "dry-run"} id=${nextId} active_flg=${decision.activeFlg} post_date=${postDate} interval=${decision.updateIntervalDays?.toFixed(1) ?? "n/a"} ${candidate.url} ${title}`,
       );
 
       if (shouldApply) {
@@ -300,7 +316,7 @@ const discoverFc2Blogs = async () => {
           [
             nextId,
             candidate.url,
-            candidate.title,
+            title,
             decision.activeFlg,
             postDate,
             remarks,
