@@ -287,6 +287,42 @@ const shouldRestartDriverAfterNavigationError = (text: string) =>
   /session deleted/i.test(text) ||
   /target window already closed/i.test(text);
 
+const isInvalidDriverSessionError = (e: any) => {
+  const text = `${e?.name || ""}\n${e?.message || ""}`;
+  return (
+    /NoSuchSessionError/i.test(text) ||
+    /valid session ID/i.test(text) ||
+    /invalid session id/i.test(text) ||
+    /session deleted/i.test(text) ||
+    /chrome not reachable/i.test(text) ||
+    /ECONNREFUSED/i.test(text)
+  );
+};
+
+const safeQuitDriver = async (driver: WebDriver, reason: string) => {
+  try {
+    await driver.quit();
+  } catch (e: any) {
+    if (!isInvalidDriverSessionError(e)) {
+      throw e;
+    }
+    await logger.warn(
+      logKey,
+      `${reason}: driver session was already closed: ${e.message}`,
+    );
+  }
+};
+
+const safeDriverSleep = async (driver: WebDriver, ms: number) => {
+  try {
+    await driver.sleep(ms);
+  } catch (e: any) {
+    if (!isInvalidDriverSessionError(e)) {
+      throw e;
+    }
+  }
+};
+
 const inspectBlogAvailability = async (
   blogUrl: string,
 ): Promise<BlogAvailability> => {
@@ -541,6 +577,7 @@ const seleniumTetsuwanGenshiFc2 = async () => {
   const buildDriver = () =>
     new Builder().forBrowser("chrome").setChromeOptions(options).build();
   let driver = await buildDriver();
+  let driverClosed = false;
   let mainWindowHandle = await driver.getWindowHandle();
   try {
     await driver.manage().setTimeouts({
@@ -761,10 +798,10 @@ const seleniumTetsuwanGenshiFc2 = async () => {
             logKey,
             "ドライバー不安定を検出。再起動します。 " + e.message,
           );
-          try {
-            await driver.quit();
-          } catch (_) {}
+          await safeQuitDriver(driver, "restart after navigation error");
+          driverClosed = true;
           driver = await buildDriver();
+          driverClosed = false;
           mainWindowHandle = await driver.getWindowHandle();
           await driver.manage().setTimeouts({
             pageLoad: 50000,
@@ -795,13 +832,17 @@ const seleniumTetsuwanGenshiFc2 = async () => {
       // }
     }
   } finally {
-    await driver.sleep(5000);
+    if (!driverClosed) {
+      await safeDriverSleep(driver, 5000);
+    }
     console.log(" " + progressText());
     await logger.info(
       logKey,
       `${profileLabel} ${profile.displayName}として巡回 ${blog_title} ${progressText()}`,
     );
-    await driver.quit();
+    if (!driverClosed) {
+      await safeQuitDriver(driver, "final cleanup");
+    }
     await connection.end();
   }
 };
