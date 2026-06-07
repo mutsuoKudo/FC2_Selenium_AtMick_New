@@ -14,6 +14,7 @@
     "start:inactive-interval:at-mick": "ts-node src/index.ts --profile=at-mick --active-flg=2",
     "start:inactive-interval:tetsuwan-genshi": "ts-node src/index.ts --profile=tetsuwan-genshi --active-flg=2",
     "dev": "ts-node-dev --respawn --transpile-only src/index.ts",
+    "discover:fc2": "ts-node src/discoverFc2Blogs.ts",
     "normalize:post-date": "ts-node src/normalizePostDates.ts",
     "build": "tsc",
     "test": "echo \"Error: no test specified\" && exit 1"
