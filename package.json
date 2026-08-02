@@ -15,6 +15,7 @@
     "start:inactive-interval:tetsuwan-genshi": "ts-node src/index.ts --profile=tetsuwan-genshi --active-flg=2",
     "dev": "ts-node-dev --respawn --transpile-only src/index.ts",
     "discover:fc2": "ts-node src/discoverFc2Blogs.ts",
+    "pickup:mayu": "ts-node src/pickupMayuBlogs.ts",
     "normalize:post-date": "ts-node src/normalizePostDates.ts",
     "build": "tsc",
     "test": "echo \"Error: no test specified\" && exit 1"
@@ -31,6 +32,7 @@
     "typescript": "^5.7.2"
   },
   "dependencies": {
+    "dotenv": "^17.4.2",
     "express": "^4.21.1",
     "log4js": "^6.9.1",
     "mysql2": "^3.11.5",

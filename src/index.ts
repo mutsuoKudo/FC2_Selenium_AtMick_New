@@ -1,3 +1,4 @@
+import "dotenv/config";
 import mysql from "mysql2/promise";
 import { Builder, By, until, WebDriver } from "selenium-webdriver";
 import path from "path";
@@ -556,12 +557,17 @@ const seleniumTetsuwanGenshiFc2 = async () => {
   );
 
   // MySQLデータベース接続
+  const mysqlPassword = process.env.MYSQL_PASSWORD;
+  if (!mysqlPassword) {
+    throw new Error("MYSQL_PASSWORD environment variable is required.");
+  }
+
   const connection = await mysql.createConnection({
-    host: "localhost",
-    user: "root",
-    password: "rootpass",
-    port: 3306,
-    database: "seleniumdb",
+    host: process.env.MYSQL_HOST || "192.168.0.198",
+    user: process.env.MYSQL_USER || "appuser",
+    password: mysqlPassword,
+    port: Number(process.env.MYSQL_PORT || 3306),
+    database: process.env.MYSQL_DATABASE || "seleniumdb",
   });
   const [urls] = await connection.execute(readySqlsUrl[0], [targetActiveFlg]);
   const urlResults = urls as any[];
