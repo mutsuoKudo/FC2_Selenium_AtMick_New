@@ -90,8 +90,6 @@ options.addArguments("--allow-insecure-localhost");
 options.setPageLoadStrategy("eager");
 options.addArguments("--disable-extensions");
 options.addArguments("--disable-popup-blocking");
-options.addArguments("--js-flags=--max-old-space-size=512");
-options.addArguments("--memory-pressure-off");
 options.addArguments("--process-per-site");
 
 // ログ出力先は、サーバー内の絶対パスを動的に取得して出力先を設定したい
@@ -640,7 +638,7 @@ const seleniumTetsuwanGenshiFc2 = async () => {
     }
 
     // 取得したURLの数だけループ
-    for (let url of urlResults) {
+    urlLoop: for (let url of urlResults) {
       console.log(" " + progressText());
 
       blog_id = url.id;
@@ -695,21 +693,23 @@ const seleniumTetsuwanGenshiFc2 = async () => {
         );
       }
 
-      // URL移動
       try {
-        try {
-          await updateLatestPostDate(connection, blog_id, blog_url, blog_title);
-        } catch (e: any) {
-          console.log(
-            `${blog_title} RSS latest post_date update failed: ${e.message}`,
-          );
-          await logger.warn(
-            logKey,
-            `${blog_id} ${blog_url} RSS latest post_date update failed: ${e.message}`,
-          );
-        }
+        await updateLatestPostDate(connection, blog_id, blog_url, blog_title);
+      } catch (e: any) {
+        console.log(
+          `${blog_title} RSS latest post_date update failed: ${e.message}`,
+        );
+        await logger.warn(
+          logKey,
+          `${blog_id} ${blog_url} RSS latest post_date update failed: ${e.message}`,
+        );
+      }
 
-        await driver.manage().setTimeouts({
+      // URL移動（Chrome異常終了時はドライバー再起動後に1回だけ再試行）
+      let navigationRetryCount = 0;
+      navigationAttempt: while (true) {
+        try {
+          await driver.manage().setTimeouts({
           pageLoad: 50000,
           implicit: 10000,
         });
@@ -735,7 +735,7 @@ const seleniumTetsuwanGenshiFc2 = async () => {
             logKey,
             progressText(),
           );
-          continue;
+          continue urlLoop;
         }
 
         const pageSource = await driver.getPageSource();
@@ -754,7 +754,7 @@ const seleniumTetsuwanGenshiFc2 = async () => {
             logKey,
             progressText(),
           );
-          continue;
+          continue urlLoop;
         }
 
         console.log(blog_title + " に移動 ");
@@ -775,7 +775,7 @@ const seleniumTetsuwanGenshiFc2 = async () => {
             logKey,
             progressText(),
           );
-          continue;
+          continue urlLoop;
         }
 
         console.log(blog_title + " URLの移動に失敗しました ");
@@ -790,13 +790,6 @@ const seleniumTetsuwanGenshiFc2 = async () => {
             " " +
             e.message,
         );
-        no_of_transferfail++;
-        no_of_skip++;
-        await logger.info(
-          logKey,
-          progressText(),
-        );
-
         // レンダラータイムアウトなどでChromeが不安定な場合は再起動
         if (shouldRestartDriverAfterNavigationError(e.message || "")) {
           console.log("ドライバーが不安定なため再起動します...");
@@ -813,13 +806,27 @@ const seleniumTetsuwanGenshiFc2 = async () => {
             pageLoad: 50000,
             implicit: 10000,
           });
-          continue;
+          if (navigationRetryCount === 0) {
+            navigationRetryCount++;
+            await logger.info(
+              logKey,
+              `${blog_id} ${blog_url} retry navigation after driver restart`,
+            );
+            continue navigationAttempt;
+          }
         }
+
+        no_of_transferfail++;
+        no_of_skip++;
+        await logger.info(logKey, progressText());
 
         try {
           await driver.navigate().back();
         } catch (_) {}
-        continue;
+        continue urlLoop;
+      }
+
+        break navigationAttempt;
       }
 
       // // ポスト日を取得しDBにセーブ
