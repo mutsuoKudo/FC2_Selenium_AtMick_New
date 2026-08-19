@@ -278,3 +278,65 @@ options.addArguments("--headless=new");
 - [ ] 対象プロファイルでSelenium処理を実行できた
 - [ ] ログ出力先と書き込み権限を確認した
 - [ ] 別PC用のfeatureブランチを必要に応じて作成した
+
+## 14. 2026-08-20 作業再開用メモ
+
+### 現在のGit状態
+
+- 作業ブランチ: `feature/OrdinaryUse_c6`
+- リモート追跡先: `origin/feature/OrdinaryUse_c6`
+- Chromeメモリ対策のコミット: `36369e9 Chromeのメモリ不足対策とURL移動の再試行処理を追加`
+- このメモ追記前の作業ツリーはcleanで、ブランチはリモートと同期済み
+
+### 移行後に確認した環境
+
+- VS CodeのターミナルはBashを使用するため、`npm.cmd` ではなく `npm` を使用できる
+- Node.js `v22.21.1`
+- npm `10.9.4`
+- `.env` は作成済みでGit管理外。秘密情報はこの文書に記録しない
+- `.env` を使ったMySQLの `SELECT 1` 接続テストは成功済み
+- `npm run build` はChromeメモリ対策後に成功済み
+
+### 実行コマンド
+
+```bash
+# ＠ミック通常
+npm run start:at-mick
+
+# 鉄腕原子通常
+npm run start:tetsuwan-genshi
+
+# ＠ミック active_flg=2
+npm run start:inactive-interval:at-mick
+
+# 鉄腕原子 active_flg=2
+npm run start:inactive-interval:tetsuwan-genshi
+
+# 新規FC2ブログ候補の発見（DB更新なし）
+npm run discover:fc2
+
+# 確認後にDBへ登録
+npm run discover:fc2 -- --apply
+
+# 最大10件に制限して登録
+npm run discover:fc2 -- --apply --limit=10
+```
+
+`--apply` はDBを書き換えるため、必ず先にドライランの対象と件数を確認する。
+
+### Chrome障害と対応内容
+
+- `DEPRECATED_ENDPOINT`、USB `0x490`、HDR/D3D11関連のログは、単独ではSelenium処理の致命的障害ではない
+- `V8 javascript OOM (Reached heap limit)` はChromeレンダラーの実際のメモリ不足
+- 原因だった `--js-flags=--max-old-space-size=512` と `--memory-pressure-off` は `src/index.ts` から削除済み
+- Chrome/ChromeDriver異常終了時の `ECONNREFUSED 127.0.0.1:<port>` は、FC2ではなくローカルのChromeDriver接続が切れたことを示す
+- ドライバー再起動後に失敗した同じURLを1回だけ再試行するよう修正済み
+- `transfer_fail` と `skip` は、再試行も失敗した場合だけ加算する
+
+### 再起動後の開始手順
+
+1. Codexに「`PC_MIGRATION_MEMO.md` を読んで、現在のGit状態を確認してください」と依頼する
+2. `git status --short --branch` でブランチと未コミット変更を確認する
+3. 必要に応じて `npm run build` を再実行する
+4. 対象プロファイルの実行コマンドで巡回を再開する
+5. OOMや `ECONNREFUSED` が再発する場合は、その直前から再起動後までのログを確認する
