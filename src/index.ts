@@ -707,6 +707,7 @@ const seleniumTetsuwanGenshiFc2 = async () => {
 
       // URL移動（Chrome異常終了時はドライバー再起動後に1回だけ再試行）
       let navigationRetryCount = 0;
+      let cookieRetryAttempted = false;
       navigationAttempt: while (true) {
         try {
           await driver.manage().setTimeouts({
@@ -719,6 +720,30 @@ const seleniumTetsuwanGenshiFc2 = async () => {
         await driver.get(blog_url);
         await dismissUnexpectedAlert(driver);
         await waitForBlogPageReady(driver);
+
+        const pageSource = await driver.getPageSource();
+        if (/400\s+Bad\s+Request/i.test(pageSource) &&
+            /Request\s+Header\s+Or\s+Cookie\s+Too\s+Large/i.test(pageSource)) {
+          if (!cookieRetryAttempted) {
+            cookieRetryAttempted = true;
+            await logger.warn(
+              logKey,
+              `${blog_id} ${blog_url} Cookie過大エラー: 現在のページに関連するCookieを削除して1回再試行します（ログイン状態が解除される場合があります）`,
+            );
+            // WebDriverのCookie削除は現在の閲覧コンテキストが対象。
+            // ブラウザー全体のCookieや他のプロファイルは削除しない。
+            await driver.manage().deleteAllCookies();
+            continue navigationAttempt;
+          }
+          await logger.warn(
+            logKey,
+            `${blog_id} ${blog_url} Cookie過大エラーが再発したためスキップします`,
+          );
+          no_of_transferfail++;
+          no_of_skip++;
+          await logger.info(logKey, progressText());
+          continue urlLoop;
+        }
 
         const sslErrorReason = await inspectChromeSslErrorPage(driver);
         if (sslErrorReason) {
@@ -738,7 +763,6 @@ const seleniumTetsuwanGenshiFc2 = async () => {
           continue urlLoop;
         }
 
-        const pageSource = await driver.getPageSource();
         const restrictedReason = detectRestrictedPage(pageSource);
         if (restrictedReason) {
           await markBlogRestricted(
