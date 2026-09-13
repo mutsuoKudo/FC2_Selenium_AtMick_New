@@ -1,6 +1,6 @@
 import "dotenv/config";
 import mysql from "mysql2/promise";
-import { Builder, By, until, WebDriver } from "selenium-webdriver";
+import { Builder, By, until, WebDriver, logging } from "selenium-webdriver";
 import path from "path";
 import os from "os";
 const chrome = require("selenium-webdriver/chrome");
@@ -63,6 +63,11 @@ const profileLabel = `[${profile.id}]`;
 
 // Chromeオプションの設定
 let options = new chrome.Options();
+// ChromeDriverのコンソール解析による columnNumber エラーを回避する。
+// アプリの巡回ログは別系統のため、引き続き記録される。
+const browserLogging = new logging.Preferences();
+browserLogging.setLevel(logging.Type.BROWSER, logging.Level.OFF);
+options.setLoggingPrefs(browserLogging);
 options.addArguments("--remote-debugging-port=0");
 options.addArguments(
   `--user-data-dir=${path.join(os.tmpdir(), `fc2-selenium-chrome-${profile.id}-${process.pid}-${Date.now()}`)}`,
