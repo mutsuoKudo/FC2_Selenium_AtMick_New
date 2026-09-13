@@ -1,4 +1,5 @@
 import "dotenv/config";
+import { parseHtmlPostDate, supportsHtmlPostDate } from "./htmlPostDate";
 import mysql from "mysql2/promise";
 import { Builder, By, until, WebDriver, logging } from "selenium-webdriver";
 import path from "path";
@@ -516,17 +517,32 @@ const updateLatestPostDate = async (
   blogUrl: string,
   blogTitle: string,
 ) => {
-  const latestEntry = await fetchLatestRssEntry(blogUrl);
+  let latestEntry: LatestRssEntry;
+  let source = "RSS";
+  try {
+    latestEntry = await fetchLatestRssEntry(blogUrl);
+  } catch (e: any) {
+    if (e.message !== "RSS item not found" || !supportsHtmlPostDate(blogUrl)) throw e;
+    const pageUrl = new URL("/", blogUrl).href;
+    const entry = parseHtmlPostDate(await fetchText(pageUrl), pageUrl);
+    source = "HTML fallback (RSS empty)";
+    latestEntry = {
+      title: entry.title,
+      link: entry.link,
+      postDate: formatPostDate(entry.date),
+      rssUrl: pageUrl,
+    };
+  }
   await connection.execute(readySqlUpdateLatestPostDate, [
     latestEntry.postDate,
     blogId,
   ]);
   console.log(
-    `${blogTitle} RSS latest post_date updated: ${latestEntry.postDate}`,
+    `${blogTitle} ${source} latest post_date updated: ${latestEntry.postDate}`,
   );
   await logger.info(
     logKey,
-    `${blogId} ${blogUrl} RSS latest post_date updated: ${latestEntry.postDate} ${latestEntry.title} ${latestEntry.link} ${latestEntry.rssUrl}`,
+    `${blogId} ${blogUrl} ${source} latest post_date updated: ${latestEntry.postDate} ${latestEntry.title} ${latestEntry.link} ${latestEntry.rssUrl}`,
   );
 };
 
