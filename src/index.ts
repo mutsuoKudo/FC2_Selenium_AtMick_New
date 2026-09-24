@@ -63,6 +63,7 @@ const logKey = profile.logKey;
 const profileLabel = `[${profile.id}]`;
 
 // Chromeオプションの設定
+const createChromeOptions = (profileDirectory: string) => {
 let options = new chrome.Options();
 // ChromeDriverのコンソール解析による columnNumber エラーを回避する。
 // アプリの巡回ログは別系統のため、引き続き記録される。
@@ -71,7 +72,7 @@ browserLogging.setLevel(logging.Type.BROWSER, logging.Level.OFF);
 options.setLoggingPrefs(browserLogging);
 options.addArguments("--remote-debugging-port=0");
 options.addArguments(
-  `--user-data-dir=${path.join(os.tmpdir(), `fc2-selenium-chrome-${profile.id}-${process.pid}-${Date.now()}`)}`,
+  `--user-data-dir=${profileDirectory}`,
 );
 // options.addArguments("--headless");
 options.addArguments("--no-sandbox");
@@ -97,6 +98,8 @@ options.setPageLoadStrategy("eager");
 options.addArguments("--disable-extensions");
 options.addArguments("--disable-popup-blocking");
 options.addArguments("--process-per-site");
+return options;
+};
 
 // ログ出力先は、サーバー内の絶対パスを動的に取得して出力先を設定したい
 const APP_ROOT = path.join(__dirname, "../");
@@ -599,12 +602,28 @@ const seleniumTetsuwanGenshiFc2 = async () => {
   }
 
   // Selenium WebDriver
-  const buildDriver = () =>
-    new Builder().forBrowser("chrome").setChromeOptions(options).build();
-  let driver = await buildDriver();
-  let driverClosed = false;
-  let mainWindowHandle = await driver.getWindowHandle();
-  try {
+  let profileGeneration = 0;
+  const newProfileDirectory = () => path.join(os.tmpdir(),
+    `fc2-selenium-chrome-${profile.id}-${process.pid}-${Date.now()}-${profileGeneration++}`);
+  let profileDirectory = newProfileDirectory();
+  const buildDriver = async () => {
+    for (let attempt = 1; attempt <= 3; attempt++) {
+      if (attempt > 1) await new Promise(resolve => setTimeout(resolve, 2000));
+      if (attempt === 3) profileDirectory = newProfileDirectory();
+      try {
+        return await new Builder().forBrowser("chrome")
+          .setChromeOptions(createChromeOptions(profileDirectory)).build();
+      } catch (e: any) {
+        await logger.warn(logKey, `${profileLabel} Chrome起動失敗 (${attempt}/3): ${e.message}`);
+        if (attempt === 3) throw e;
+      }
+    }
+    throw new Error("Chrome startup attempts exhausted");
+  };
+  let driver: WebDriver;
+  let driverClosed = true;
+  let mainWindowHandle: string;
+  const login = async () => {
     await driver.manage().setTimeouts({
       pageLoad: 30000,
       implicit: 10000,
@@ -654,9 +673,15 @@ const seleniumTetsuwanGenshiFc2 = async () => {
         logKey,
         " FC2ブログのログインに失敗しました " + e.message,
       );
-    } finally {
-      // 必要であれば処理を描く
+      throw e;
     }
+  };
+
+  try {
+    driver = await buildDriver();
+    driverClosed = false;
+    mainWindowHandle = await driver.getWindowHandle();
+    await login();
 
     // 取得したURLの数だけループ
     urlLoop: for (let url of urlResults) {
@@ -837,16 +862,32 @@ const seleniumTetsuwanGenshiFc2 = async () => {
         );
         // レンダラータイムアウトなどでChromeが不安定な場合は再起動
         if (shouldRestartDriverAfterNavigationError(e.message || "")) {
+          const previousProfileDirectory = profileDirectory;
           console.log("ドライバーが不安定なため再起動します...");
           await logger.warn(
             logKey,
             "ドライバー不安定を検出。再起動します。 " + e.message,
           );
-          await safeQuitDriver(driver, "restart after navigation error");
+          try {
+            await safeQuitDriver(driver, "restart after navigation error");
+          } catch (quitError: any) {
+            await logger.warn(logKey, `旧Chrome終了確認失敗: ${quitError.message}`);
+            profileDirectory = newProfileDirectory();
+          }
           driverClosed = true;
-          driver = await buildDriver();
-          driverClosed = false;
-          mainWindowHandle = await driver.getWindowHandle();
+          await new Promise(resolve => setTimeout(resolve, 2000));
+          try {
+            driver = await buildDriver();
+            driverClosed = false;
+            mainWindowHandle = await driver.getWindowHandle();
+            // 同じプロファイルでは既存Cookieを維持し、新規の場合に再ログインする。
+            if (profileDirectory !== previousProfileDirectory) await login();
+          } catch (restartError: any) {
+            no_of_transferfail++;
+            no_of_skip++;
+            await logger.warn(logKey, `${blog_id} ${blog_url} Chrome復旧失敗。巡回を終了します: ${restartError.message}`);
+            throw restartError;
+          }
           await driver.manage().setTimeouts({
             pageLoad: 50000,
             implicit: 10000,
@@ -890,20 +931,23 @@ const seleniumTetsuwanGenshiFc2 = async () => {
       // }
     }
   } finally {
-    if (!driverClosed) {
-      await safeDriverSleep(driver, 5000);
-    }
+    try {
     console.log(" " + progressText());
     await logger.info(
       logKey,
       `${profileLabel} ${profile.displayName}として巡回 ${blog_title} ${progressText()}`,
     );
     if (!driverClosed) {
-      await safeQuitDriver(driver, "final cleanup");
+      await safeQuitDriver(driver!, "final cleanup");
     }
-    await connection.end();
+    } finally {
+      await connection.end();
+    }
   }
 };
 
 // 非同期関数呼び出し
-seleniumTetsuwanGenshiFc2();
+seleniumTetsuwanGenshiFc2().catch((e: any) => {
+  console.error("巡回を終了しました:", e.message);
+  process.exitCode = 1;
+});
