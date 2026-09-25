@@ -1,4 +1,5 @@
 import "dotenv/config";
+import { guardExecutor } from "./webdriverDeadline";
 import { parseHtmlPostDate, supportsHtmlPostDate } from "./htmlPostDate";
 import mysql from "mysql2/promise";
 import { Builder, By, until, WebDriver, logging } from "selenium-webdriver";
@@ -288,6 +289,7 @@ const inspectChromeSslErrorPage = async (driver: WebDriver) => {
 };
 
 const shouldRestartDriverAfterNavigationError = (text: string) =>
+  /WebDriver command deadline/i.test(text) ||
   /ECONNREFUSED/i.test(text) ||
   /Timed out receiving message from renderer/i.test(text) ||
   /chrome not reachable/i.test(text) ||
@@ -611,8 +613,18 @@ const seleniumTetsuwanGenshiFc2 = async () => {
       if (attempt > 1) await new Promise(resolve => setTimeout(resolve, 2000));
       if (attempt === 3) profileDirectory = newProfileDirectory();
       try {
-        return await new Builder().forBrowser("chrome")
+        const serviceBuilder = new chrome.ServiceBuilder();
+        const originalBuild = serviceBuilder.build.bind(serviceBuilder);
+        let service: any;
+        serviceBuilder.build = () => (service = originalBuild());
+        const built = await new Builder().forBrowser("chrome")
+          .setChromeService(serviceBuilder)
           .setChromeOptions(createChromeOptions(profileDirectory)).build();
+        guardExecutor(built.getExecutor(), () => {
+          // Stop only the ChromeDriver created by this instance, not other crawls.
+          Promise.resolve().then(() => service?.kill()).catch(() => {});
+        });
+        return built;
       } catch (e: any) {
         await logger.warn(logKey, `${profileLabel} Chrome起動失敗 (${attempt}/3): ${e.message}`);
         if (attempt === 3) throw e;
